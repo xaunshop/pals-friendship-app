@@ -266,7 +266,7 @@ class _ProfileCompletionGateState extends State<ProfileCompletionGate> {
         const SizedBox(height: 12),
         FilledButton(onPressed: refresh, child: const Text('Retry')),
         TextButton(onPressed: () => Supabase.instance.client.auth.signOut(), child: const Text('Sign out')),
-      ])));
+      ]))));
       if (s.data == true) return ProfileCompletionScreen(onCompleted: refresh);
       return MainShell(key: ValueKey(Supabase.instance.client.auth.currentUser!.id));
     },
