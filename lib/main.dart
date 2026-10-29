@@ -171,7 +171,7 @@ class _AuthScreenState extends State<AuthScreen> {
   Future<void> verifyOtp() async {
     setState(() { busy = true; error = null; });
     try {
-      if (!RegExp(r'^\\d{6}$').hasMatch(otp.text.trim())) throw Exception('Enter the 6-digit code from your email.');
+      if (!RegExp(r'^\d{6}$').hasMatch(otp.text.trim())) throw Exception('Enter the 6-digit code from your email.');
       await api.verifySignupOtp(email: identifier.text, token: otp.text);
     } catch (e) {
       if (mounted) setState(() => error = 'Could not verify code: ${e.toString().replaceFirst('Exception: ', '').replaceAll(')', '')}');
