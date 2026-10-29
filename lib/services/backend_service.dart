@@ -38,7 +38,7 @@ class BackendService {
 
   Future<bool> usernameAvailable(String value) async {
     final username = value.trim().replaceFirst(RegExp(r'^@'), '').toLowerCase();
-    if (!RegExp(r'^[a-z0-9_]{3,30}
+    if (!RegExp(r'^[a-z0-9_]{3,30}\
 
   Future<void> signOut() => client.auth.signOut();
 
