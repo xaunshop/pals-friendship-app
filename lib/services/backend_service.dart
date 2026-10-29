@@ -38,7 +38,7 @@ class BackendService {
 
   Future<bool> usernameAvailable(String value) async {
     final username = value.trim().replaceFirst(RegExp(r'^@'), '').toLowerCase();
-    if (!RegExp(r'^[a-z0-9_]{1,35}.hasMatch(username) || username.length > 30) return false;
+    if (!RegExp(r'^[a-z0-9_]{1,35}$').hasMatch(username)) return false;
     final result = await client.rpc('is_username_available', params: {'candidate': username});
     return result == true;
   }
