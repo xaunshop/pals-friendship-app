@@ -35,6 +35,26 @@ jobs:
             flutter create --platforms=android .
           fi
 
+      - name: Configure Supabase OAuth callback deep link
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("android/app/src/main/AndroidManifest.xml")
+          manifest = path.read_text()
+          if 'android:scheme="io.supabase.flutter"' not in manifest:
+              intent_filter = '''
+                  <intent-filter>
+                      <action android:name="android.intent.action.VIEW" />
+                      <category android:name="android.intent.category.DEFAULT" />
+                      <category android:name="android.intent.category.BROWSABLE" />
+                      <data android:scheme="io.supabase.flutter" android:host="login-callback" />
+                  </intent-filter>
+              '''
+              manifest = manifest.replace("</activity>", intent_filter + "\n        </activity>", 1)
+              path.write_text(manifest)
+          PY
+
       - name: Set launcher label from app config
         shell: bash
         run: |
