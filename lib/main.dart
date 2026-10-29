@@ -9,6 +9,8 @@ const purple = Color(0xFF7357E8);
 const dark = Color(0xFF24213A);
 const background = Color(0xFFF7F6FC);
 
+// The global subscription must stay alive for incoming OAuth links.
+// ignore: unused_element
 StreamSubscription<Uri>? _authLinkSubscription;
 
 Future<void> _handleAuthLink(Uri uri) async {
