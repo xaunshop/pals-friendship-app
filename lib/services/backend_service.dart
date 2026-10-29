@@ -50,12 +50,16 @@ class BackendService {
     for (final item in items) {
       item['author'] = byId[item['author_id'].toString()] ?? <String, dynamic>{};
     }
-    final likes = await client.from('post_likes').select('post_id,user_id').inFilter('post_id', items.map((e) => e['id'].toString()).toList());
+    final postIds = items.map((e) => e['id'].toString()).toList();
+    final likes = await client.from('post_likes').select('post_id,user_id').inFilter('post_id', postIds);
     final likeRows = List<Map<String, dynamic>>.from(likes);
+    final commentRows = await client.from('comments').select('post_id').inFilter('post_id', postIds);
+    final comments = List<Map<String, dynamic>>.from(commentRows);
     for (final item in items) {
       final own = likeRows.any((l) => l['post_id'] == item['id'] && l['user_id'] == user!.id);
       item['liked_by_me'] = own;
       item['likes_count'] = likeRows.where((l) => l['post_id'] == item['id']).length;
+      item['comments_count'] = comments.where((c) => c['post_id'] == item['id']).length;
     }
     return items;
   }
