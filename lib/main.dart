@@ -146,7 +146,7 @@ class _AuthScreenState extends State<AuthScreen> {
         if (name.text.trim().isEmpty) throw Exception('Enter your full name or display name.');
         if (email.text.trim().isEmpty || !email.text.contains('@')) throw Exception('Enter a valid email address.');
         if (password.text.length < 8) throw Exception('Use a password with at least 8 characters.');
-        if (!RegExp(r'^\\+?[0-9 ()-]{7,20}$').hasMatch(phone.text.trim())) throw Exception('Enter a valid phone number.');
+        if (!RegExp(r'^\+?[0-9 ()-]{7,20}$').hasMatch(phone.text.trim())) throw Exception('Enter a valid phone number.');
         if (dob == null) throw Exception('Choose your date of birth.');
         if (BackendService.ageOn(dob!) < 12) throw Exception('You must be at least 12 years old to use LAMA.');
         if (!consent) throw Exception('Please acknowledge and accept the terms and privacy consent.');
@@ -320,7 +320,7 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
     setState(() { busy = true; error = null; });
     try {
       if (name.text.trim().isEmpty) throw Exception('Enter your name.');
-      if (!RegExp(r'^\\+?[0-9 ()-]{7,20}$').hasMatch(phone.text.trim())) throw Exception('Enter a valid phone number.');
+      if (!RegExp(r'^\+?[0-9 ()-]{7,20}$').hasMatch(phone.text.trim())) throw Exception('Enter a valid phone number.');
       if (dob == null) throw Exception('Choose your date of birth.');
       if (!consent) throw Exception('Please acknowledge and consent before continuing.');
       await api.completeProfile(displayName: name.text, username: username.text, phoneNumber: phone.text, dateOfBirth: dob!, consentAccepted: consent);
