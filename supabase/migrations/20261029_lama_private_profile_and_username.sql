@@ -29,6 +29,7 @@ create policy "Users unghost own posts" on public.ghosted_posts
   for delete to authenticated using (user_id = auth.uid());
 
 alter table public.private_profile_details enable row level security;
+alter table public.private_profile_details drop constraint if exists private_profile_min_age;
 
 drop policy if exists "Users read own private profile details" on public.private_profile_details;
 create policy "Users read own private profile details"
