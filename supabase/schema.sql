@@ -135,6 +135,63 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created after insert on auth.users
 for each row execute procedure public.handle_new_user();
 
+-- Security-definer helper avoids recursive RLS checks on conversation_members.
+create or replace function public.is_conversation_member(target_conversation_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $
+  select exists (
+    select 1 from public.conversation_members
+    where conversation_id = target_conversation_id and user_id = auth.uid()
+  );
+$;
+
+-- Create a direct chat only between accepted friends, and return its id.
+create or replace function public.create_direct_conversation(other_user_id uuid)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $
+declare
+  current_user_id uuid := auth.uid();
+  found_id uuid;
+begin
+  if current_user_id is null then raise exception 'Sign in first'; end if;
+  if other_user_id is null or other_user_id = current_user_id then raise exception 'Invalid friend'; end if;
+  if not exists (
+    select 1 from public.friendships f
+    where f.status = 'accepted'
+      and ((f.requester_id = current_user_id and f.addressee_id = other_user_id)
+        or (f.requester_id = other_user_id and f.addressee_id = current_user_id))
+  ) then raise exception 'You can message accepted friends only'; end if;
+  if exists (
+    select 1 from public.blocks b
+    where (b.blocker_id = current_user_id and b.blocked_id = other_user_id)
+       or (b.blocker_id = other_user_id and b.blocked_id = current_user_id)
+  ) then raise exception 'Messaging is unavailable for this connection'; end if;
+
+  select c.id into found_id
+  from public.conversations c
+  where c.is_group = false
+    and exists (select 1 from public.conversation_members m where m.conversation_id = c.id and m.user_id = current_user_id)
+    and exists (select 1 from public.conversation_members m where m.conversation_id = c.id and m.user_id = other_user_id)
+    and (select count(*) from public.conversation_members m where m.conversation_id = c.id) = 2
+  limit 1;
+  if found_id is not null then return found_id; end if;
+
+  insert into public.conversations(is_group) values (false) returning id into found_id;
+  insert into public.conversation_members(conversation_id, user_id)
+    values (found_id, current_user_id), (found_id, other_user_id);
+  return found_id;
+end;
+$;
+
+grant execute on function public.create_direct_conversation(uuid) to authenticated;
+
 -- Enable RLS on every user-data table.
 alter table public.profiles enable row level security;
 alter table public.posts enable row level security;
@@ -185,10 +242,10 @@ create policy "Users leave as self" on public.community_members for delete to au
 -- Conversation rows and messages are visible only to conversation members.
 create policy "Members read conversations" on public.conversations for select to authenticated using (exists (select 1 from public.conversation_members cm where cm.conversation_id = id and cm.user_id = auth.uid()));
 create policy "Authenticated users create conversations" on public.conversations for insert to authenticated with check (true);
-create policy "Members read conversation membership" on public.conversation_members for select to authenticated using (user_id = auth.uid() or exists (select 1 from public.conversation_members cm where cm.conversation_id = conversation_id and cm.user_id = auth.uid()));
+create policy "Members read conversation membership" on public.conversation_members for select to authenticated using (user_id = auth.uid() or public.is_conversation_member(conversation_id));
 create policy "Users add themselves to conversation" on public.conversation_members for insert to authenticated with check (user_id = auth.uid());
-create policy "Members read messages" on public.messages for select to authenticated using (exists (select 1 from public.conversation_members cm where cm.conversation_id = conversation_id and cm.user_id = auth.uid()));
-create policy "Members send as self" on public.messages for insert to authenticated with check (sender_id = auth.uid() and exists (select 1 from public.conversation_members cm where cm.conversation_id = conversation_id and cm.user_id = auth.uid()));
+create policy "Members read messages" on public.messages for select to authenticated using (public.is_conversation_member(conversation_id));
+create policy "Members send as self" on public.messages for insert to authenticated with check (sender_id = auth.uid() and public.is_conversation_member(conversation_id));
 
 -- Blocks and reports remain private to the person who created them.
 create policy "Users read own blocks" on public.blocks for select to authenticated using (blocker_id = auth.uid());
@@ -206,3 +263,14 @@ insert into public.communities(name, category, description) values
  ('Music People','Music','Discover artists, playlists and instruments.'),
  ('Outside Club','Outdoors','Walks, hikes, photography and fresh-air plans.')
 on conflict (name) do nothing;
+
+-- Enable realtime updates for chat messages (idempotent).
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'messages'
+  ) then
+    alter publication supabase_realtime add table public.messages;
+  end if;
+end $$;
