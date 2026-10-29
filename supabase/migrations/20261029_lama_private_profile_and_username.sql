@@ -8,8 +8,7 @@ create table if not exists public.private_profile_details (
   date_of_birth date not null,
   consent_accepted boolean not null default false,
   consent_at timestamptz,
-  updated_at timestamptz not null default now(),
-  constraint private_profile_min_age check (date_of_birth <= (current_date - interval '12 years')::date)
+  updated_at timestamptz not null default now()
 );
 
 create table if not exists public.ghosted_posts (
@@ -37,14 +36,7 @@ create policy "Users read own private profile details"
   using (user_id = auth.uid());
 
 drop policy if exists "Users insert own private profile details" on public.private_profile_details;
-create policy "Users insert own private profile details"
-  on public.private_profile_details for insert to authenticated
-  with check (user_id = auth.uid());
-
 drop policy if exists "Users update own private profile details" on public.private_profile_details;
-create policy "Users update own private profile details"
-  on public.private_profile_details for update to authenticated
-  using (user_id = auth.uid()) with check (user_id = auth.uid());
 
 create or replace function public.is_username_available(candidate text)
 returns boolean
