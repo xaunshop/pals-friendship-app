@@ -122,7 +122,7 @@ declare
   safe_username text;
 begin
   base_name := coalesce(new.raw_user_meta_data ->> 'display_name', split_part(new.email, '@', 1), 'friend');
-  safe_username := lower(regexp_replace(coalesce(new.raw_user_meta_data ->> 'username', split_part(new.email, '@', 1), 'friend'), '[^a-zA-Z0-9_]', '', 'g'));
+  safe_username := left(lower(regexp_replace(coalesce(new.raw_user_meta_data ->> 'username', split_part(new.email, '@', 1), 'friend'), '[^a-zA-Z0-9_]', '', 'g')), 20);
   if char_length(safe_username) < 3 then safe_username := 'friend' || substr(new.id::text, 1, 6); end if;
   insert into public.profiles(id, username, display_name)
   values (new.id, safe_username || '_' || substr(new.id::text, 1, 4), left(base_name, 60))
@@ -207,7 +207,7 @@ alter table public.blocks enable row level security;
 alter table public.reports enable row level security;
 
 -- Profiles: authenticated users can discover public profiles; owners edit their own.
-create policy "Authenticated users can view profiles" on public.profiles for select to authenticated using (true);
+create policy "Users view public profiles and their friends" on public.profiles for select to authenticated using (id = auth.uid() or is_private = false or exists (select 1 from public.friendships f where f.status = 'accepted' and ((f.requester_id = auth.uid() and f.addressee_id = id) or (f.addressee_id = auth.uid() and f.requester_id = id))));
 create policy "Users insert own profile" on public.profiles for insert to authenticated with check (id = auth.uid());
 create policy "Users update own profile" on public.profiles for update to authenticated using (id = auth.uid()) with check (id = auth.uid());
 create policy "Users delete own profile" on public.profiles for delete to authenticated using (id = auth.uid());
