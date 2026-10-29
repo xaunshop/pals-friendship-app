@@ -431,7 +431,7 @@ class _FeedPageState extends State<FeedPage> {
         final author = Map<String,dynamic>.from(p['author'] ?? {});
         final liked = p['liked_by_me'] == true;
         return Card(margin: const EdgeInsets.fromLTRB(16,0,16,12), child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [avatar((author['display_name'] ?? 'Friend').toString(), url: author['avatar_url']?.toString()), const SizedBox(width:10), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text((author['display_name'] ?? 'Friend').toString(), style: const TextStyle(fontWeight:FontWeight.w900,color:dark)), Text('@${author['username'] ?? 'friend'} · ${ago(p['created_at'])}', style: const TextStyle(color:Colors.black45,fontSize:12))])), TextButton.icon(onPressed: () => _reportPost(context,p), icon: const Icon(Icons.visibility_off_outlined, size:18), label: const Text('Ghost'), style: TextButton.styleFrom(foregroundColor: Colors.black54, padding: const EdgeInsets.symmetric(horizontal:8)))]),
+          Row(children: [avatar((author['display_name'] ?? 'Friend').toString(), url: author['avatar_url']?.toString()), const SizedBox(width:10), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text((author['display_name'] ?? 'Friend').toString(), style: const TextStyle(fontWeight:FontWeight.w900,color:dark)), Text('@${author['username'] ?? 'friend'} · ${ago(p['created_at'])}', style: const TextStyle(color:Colors.black45,fontSize:12))])), TextButton.icon(onPressed: () => _ghostPost(context,p), icon: const Icon(Icons.visibility_off_outlined, size:18), label: const Text('Ghost'), style: TextButton.styleFrom(foregroundColor: Colors.black54, padding: const EdgeInsets.symmetric(horizontal:8)))]),
           const SizedBox(height:10), Text(p['body'].toString(), style: const TextStyle(height:1.5,fontSize:14,color:dark)),
           const SizedBox(height:10), Row(children: [
             IconButton(onPressed: () async { try { await widget.api.toggleLike(p['id'].toString(), liked); refresh(); } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Like failed: $e'))); } }, icon: Icon(liked ? Icons.favorite_rounded : Icons.favorite_border_rounded, color: liked ? Colors.pink : dark)),
@@ -477,12 +477,27 @@ class _FeedPageState extends State<FeedPage> {
     controller.dispose();
   }
 
-  Future<void> _reportPost(BuildContext context, Map<String,dynamic> p) async {
-    final reason = await showDialog<String>(context: context, builder: (ctx) => SimpleDialog(title: const Text('Ghost / report this post'), children: ['Spam or scam','Harassment','Inappropriate content','Other'].map((r) => SimpleDialogOption(onPressed: () => Navigator.pop(ctx,r), child: Text(r))).toList()));
-    if (reason == null) return;
-    try { await widget.api.report(postId:p['id'].toString(),reason:reason); if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Report submitted for review.'))); } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('Report failed: $e'))); }
+  Future<void> _ghostPost(BuildContext context, Map<String,dynamic> p) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Ghost this post?'),
+        content: const Text('This post will be hidden from your feed. You can still see it if you choose to unghost it in a future version.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Ghost post')),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    try {
+      await widget.api.ghostPost(p['id'].toString());
+      refresh();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Post ghosted and hidden from your feed.')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not ghost post: $e')));
+    }
   }
-}
 
 class DiscoverPage extends StatefulWidget {
   const DiscoverPage({super.key, required this.api});
