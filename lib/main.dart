@@ -215,7 +215,7 @@ class _ProfileCompletionGateState extends State<ProfileCompletionGate> {
       if (s.hasError) return Scaffold(body: Center(child: Padding(padding: const EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [
         const Icon(Icons.cloud_off_outlined, size: 42, color: purple),
         const SizedBox(height: 12),
-        const Text('Could not verify your private profile setup. Run the LAMA profile migration in Supabase, then retry.', textAlign: TextAlign.center),
+        const Text('Your LAMA database setup is incomplete. Run supabase/migrations/20261029_lama_release_readiness.sql in Supabase SQL Editor, then retry.', textAlign: TextAlign.center),
         const SizedBox(height: 12),
         FilledButton(onPressed: refresh, child: const Text('Retry')),
         TextButton(onPressed: () => Supabase.instance.client.auth.signOut(), child: const Text('Sign out')),
@@ -261,7 +261,7 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
     try {
       final result = await api.usernameAvailable(username.text);
       if (mounted) setState(() { available = result; if (!result) error = 'That username is unavailable.'; });
-    } catch (_) { if (mounted) setState(() => error = 'Could not check username. Run the profile migration and retry.'); }
+    } catch (_) { if (mounted) setState(() => error = 'Could not check username. Run supabase/migrations/20261029_lama_release_readiness.sql in Supabase SQL Editor, then retry.'); }
     finally { if (mounted) setState(() => checking = false); }
   }
   Future<void> chooseDob() async {
