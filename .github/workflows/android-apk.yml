@@ -45,16 +45,16 @@ jobs:
           path = Path("android/app/src/main/AndroidManifest.xml")
           manifest = path.read_text()
 
-          # Flutter's OAuth callback must be handled by the app's MainActivity.
-          match = re.search(r'<activity\\b(?=[^>]*android:name="[^"]*MainActivity")[^>]*>.*?</activity>', manifest, re.S)
+          # Match MainActivity, not an unrelated activity.
+          match = re.search(r'<activity\b(?=[^>]*android:name="[^"]*MainActivity")[^>]*>.*?</activity>', manifest, re.S)
           if not match:
               raise SystemExit("Could not find MainActivity in AndroidManifest.xml")
 
           activity = match.group(0)
-          if "android:launchMode=" not in activity:
-              activity = activity.replace("<activity", '<activity android:launchMode="singleTop"', 1)
-          elif re.search(r'android:launchMode="[^"]+"', activity):
+          if re.search(r'android:launchMode="[^"]+"', activity):
               activity = re.sub(r'android:launchMode="[^"]+"', 'android:launchMode="singleTop"', activity, count=1)
+          else:
+              activity = activity.replace("<activity", '<activity android:launchMode="singleTop"', 1)
 
           if 'android:scheme="io.supabase.flutter"' not in activity:
               intent_filter = '''
@@ -65,7 +65,7 @@ jobs:
                       <data android:scheme="io.supabase.flutter" android:host="login-callback" />
                   </intent-filter>
               '''
-              activity = activity.replace("</activity>", intent_filter + "\\n        </activity>", 1)
+              activity = activity.replace("</activity>", intent_filter + "\n        </activity>", 1)
 
           manifest = manifest[:match.start()] + activity + manifest[match.end():]
           path.write_text(manifest)
