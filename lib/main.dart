@@ -127,7 +127,7 @@ class _AuthScreenState extends State<AuthScreen> {
     const SizedBox(height: 20), SizedBox(width: double.infinity, height: 52, child: FilledButton(onPressed: busy ? null : submit, child: busy ? const SizedBox(width:20,height:20,child:CircularProgressIndicator(strokeWidth:2,color:Colors.white)) : Text(signup ? 'Create account' : 'Sign in', style: const TextStyle(fontWeight: FontWeight.w800)))),
     const SizedBox(height: 12), Center(child: TextButton(onPressed: () => setState(() { signup = !signup; error = null; }), child: Text(signup ? 'Already have an account? Sign in' : 'New here? Create an account'))),
     const SizedBox(height: 8), const Center(child: Text('Be kind • Respect boundaries • Stay safe', style: TextStyle(fontSize: 12, color: Colors.black45))),
-  ])))));
+  ]))))));
 }
 
 class MainShell extends StatefulWidget {
