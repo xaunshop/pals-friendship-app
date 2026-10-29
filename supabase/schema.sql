@@ -142,12 +142,12 @@ language sql
 security definer
 set search_path = public
 stable
-as $
+as $$
   select exists (
     select 1 from public.conversation_members
     where conversation_id = target_conversation_id and user_id = auth.uid()
   );
-$;
+$$;
 
 -- Create a direct chat only between accepted friends, and return its id.
 create or replace function public.create_direct_conversation(other_user_id uuid)
@@ -155,7 +155,7 @@ returns uuid
 language plpgsql
 security definer
 set search_path = public
-as $
+as $$
 declare
   current_user_id uuid := auth.uid();
   found_id uuid;
@@ -188,7 +188,7 @@ begin
     values (found_id, current_user_id), (found_id, other_user_id);
   return found_id;
 end;
-$;
+$$;
 
 grant execute on function public.create_direct_conversation(uuid) to authenticated;
 
