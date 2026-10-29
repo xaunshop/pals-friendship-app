@@ -81,7 +81,7 @@ class AuthGate extends StatelessWidget {
     stream: Supabase.instance.client.auth.onAuthStateChange,
     builder: (context, snapshot) {
       final user = Supabase.instance.client.auth.currentUser;
-      return user == null ? const AuthScreen() : MainShell(key: ValueKey(user.id));
+      return user == null ? const AuthScreen() : const ProfileCompletionGate();
     },
   );
 }
@@ -90,44 +90,269 @@ class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
   @override State<AuthScreen> createState() => _AuthScreenState();
 }
+
 class _AuthScreenState extends State<AuthScreen> {
   final email = TextEditingController();
   final password = TextEditingController();
   final name = TextEditingController();
-  bool signup = false, busy = false, obscure = true;
+  final username = TextEditingController();
+  final phone = TextEditingController();
+  DateTime? dob;
+  bool signup = false, busy = false, obscure = true, consent = false, checkingUsername = false;
+  bool? usernameIsAvailable;
   String? error;
-  @override void dispose() { email.dispose(); password.dispose(); name.dispose(); super.dispose(); }
+
+  @override
+  void dispose() {
+    email.dispose(); password.dispose(); name.dispose(); username.dispose(); phone.dispose();
+    super.dispose();
+  }
+
+  Future<void> checkUsername() async {
+    final value = username.text.trim().replaceFirst(RegExp(r'^@'), '').toLowerCase();
+    if (!RegExp(r'^[a-z0-9_]{3,30}$').hasMatch(value)) {
+      setState(() { usernameIsAvailable = false; error = 'Username must be 3–30 characters using letters, numbers or underscores.'; });
+      return;
+    }
+    setState(() { checkingUsername = true; usernameIsAvailable = null; error = null; });
+    try {
+      final available = await BackendService(Supabase.instance.client).usernameAvailable(value);
+      if (mounted) setState(() { usernameIsAvailable = available; if (!available) error = 'That username is already taken. Try another one.'; });
+    } catch (e) {
+      if (mounted) setState(() => error = 'Could not check username. Please retry after the database migration is installed.');
+    } finally {
+      if (mounted) setState(() => checkingUsername = false);
+    }
+  }
+
+  Future<void> chooseDob() async {
+    final now = DateTime.now();
+    final last = DateTime(now.year - 12, now.month, now.day);
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: dob ?? DateTime(now.year - 18, now.month, now.day),
+      firstDate: DateTime(1900),
+      lastDate: last,
+      helpText: 'You must be at least 12 years old',
+    );
+    if (picked != null && mounted) setState(() { dob = picked; error = null; });
+  }
+
   Future<void> submit() async {
     setState(() { busy = true; error = null; });
     try {
       final api = BackendService(Supabase.instance.client);
       if (signup) {
-        if (name.text.trim().isEmpty) throw Exception('Enter your display name.');
+        if (name.text.trim().isEmpty) throw Exception('Enter your full name or display name.');
+        if (email.text.trim().isEmpty || !email.text.contains('@')) throw Exception('Enter a valid email address.');
         if (password.text.length < 8) throw Exception('Use a password with at least 8 characters.');
-        await api.signUp(email.text, password.text, name.text);
+        if (!RegExp(r'^\\+?[0-9 ()-]{7,20}$').hasMatch(phone.text.trim())) throw Exception('Enter a valid phone number.');
+        if (dob == null) throw Exception('Choose your date of birth.');
+        if (BackendService.ageOn(dob!) < 12) throw Exception('You must be at least 12 years old to use LAMA.');
+        if (!consent) throw Exception('Please acknowledge and accept the terms and privacy consent.');
+        await api.signUp(
+          email: email.text,
+          password: password.text,
+          displayName: name.text,
+          username: username.text,
+          phoneNumber: phone.text,
+          dateOfBirth: dob!,
+          consentAccepted: consent,
+        );
         if (mounted && Supabase.instance.client.auth.currentUser == null) {
-          setState(() => error = 'Check your email to confirm your account, then sign in.');
+          setState(() => error = 'Account created. Check your email to confirm your account, then sign in.');
         }
       } else {
         await api.signIn(email.text, password.text);
       }
-    } catch (e) { if (mounted) setState(() => error = e.toString().replaceFirst('Exception: ', '').replaceFirst('AuthException(message: ', '').replaceAll(')', '')); }
-    finally { if (mounted) setState(() => busy = false); }
+    } catch (e) {
+      if (mounted) setState(() => error = e.toString().replaceFirst('Exception: ', '').replaceFirst('AuthException(message: ', '').replaceAll(')', ''));
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
   }
-  @override Widget build(BuildContext context) => Scaffold(body: SafeArea(child: Center(child: SingleChildScrollView(padding: const EdgeInsets.all(24), child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 440), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-    Container(width: 64, height: 64, decoration: BoxDecoration(color: purple, borderRadius: BorderRadius.circular(21)), child: const Icon(Icons.diversity_3_rounded, color: Colors.white, size: 34)),
-    const SizedBox(height: 24), Text(signup ? 'Join the circle.' : 'Good friends start here.', style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w900, color: dark, letterSpacing: -.7)),
-    const SizedBox(height: 8), const Text('A social space for shared interests, good conversations and platonic friendships.', style: TextStyle(color: Colors.black54, height: 1.45)),
-    const SizedBox(height: 26),
-    if (signup) ...[TextField(controller: name, textCapitalization: TextCapitalization.words, decoration: const InputDecoration(labelText: 'Display name', prefixIcon: Icon(Icons.person_outline))), const SizedBox(height: 12)],
-    TextField(controller: email, keyboardType: TextInputType.emailAddress, autocorrect: false, decoration: const InputDecoration(labelText: 'Email address', prefixIcon: Icon(Icons.mail_outline))),
-    const SizedBox(height: 12),
-    TextField(controller: password, obscureText: obscure, decoration: InputDecoration(labelText: 'Password', prefixIcon: const Icon(Icons.lock_outline), suffixIcon: IconButton(onPressed: () => setState(() => obscure = !obscure), icon: Icon(obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined)))),
-    if (error != null) ...[const SizedBox(height: 12), Container(width: double.infinity, padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: const Color(0xFFFFE9E9), borderRadius: BorderRadius.circular(12)), child: Text(error!, style: const TextStyle(color: Color(0xFF9A2727), fontSize: 13)))],
-    const SizedBox(height: 20), SizedBox(width: double.infinity, height: 52, child: FilledButton(onPressed: busy ? null : submit, child: busy ? const SizedBox(width:20,height:20,child:CircularProgressIndicator(strokeWidth:2,color:Colors.white)) : Text(signup ? 'Create account' : 'Sign in', style: const TextStyle(fontWeight: FontWeight.w800)))),
-    const SizedBox(height: 12), Center(child: TextButton(onPressed: () => setState(() { signup = !signup; error = null; }), child: Text(signup ? 'Already have an account? Sign in' : 'New here? Create an account'))),
-    const SizedBox(height: 8), const Center(child: Text('Be kind • Respect boundaries • Stay safe', style: TextStyle(fontSize: 12, color: Colors.black45))),
-  ]))))));
+
+  Future<void> googleSignIn() async {
+    setState(() { busy = true; error = null; });
+    try {
+      await BackendService(Supabase.instance.client).signInWithGoogle();
+    } catch (e) {
+      if (mounted) setState(() => error = 'Google sign-in failed: ${e.toString().replaceFirst('Exception: ', '')}');
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    body: SafeArea(child: Center(child: SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 440), child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Container(width: 64, height: 64, decoration: BoxDecoration(color: purple, borderRadius: BorderRadius.circular(21)), child: const Icon(Icons.diversity_3_rounded, color: Colors.white, size: 34)),
+          const SizedBox(height: 24),
+          Text(signup ? 'Join the circle.' : 'Good friends start here.', style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w900, color: dark, letterSpacing: -.7)),
+          const SizedBox(height: 8),
+          const Text('A social space for shared interests, good conversations and platonic friendships.', style: TextStyle(color: Colors.black54, height: 1.45)),
+          const SizedBox(height: 24),
+          if (signup) ...[
+            TextField(controller: name, textCapitalization: TextCapitalization.words, decoration: const InputDecoration(labelText: 'Name', prefixIcon: Icon(Icons.person_outline))),
+            const SizedBox(height: 12),
+            Row(children: [
+              Expanded(child: TextField(controller: username, autocorrect: false, onChanged: (_) => setState(() => usernameIsAvailable = null), decoration: const InputDecoration(labelText: 'Username', prefixText: '@'))),
+              const SizedBox(width: 8),
+              IconButton.filledTonal(onPressed: checkingUsername ? null : checkUsername, tooltip: 'Check username', icon: checkingUsername ? const SizedBox(width:18,height:18,child:CircularProgressIndicator(strokeWidth:2)) : const Icon(Icons.check_circle_outline)),
+            ]),
+            if (usernameIsAvailable == true) const Padding(padding: EdgeInsets.only(top:5,left:4), child: Text('Username available', style: TextStyle(color: Colors.green, fontSize: 12))),
+            const SizedBox(height: 12),
+            TextField(controller: phone, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Phone number (private)', prefixIcon: Icon(Icons.phone_outlined))),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(onPressed: chooseDob, icon: const Icon(Icons.calendar_month_outlined), label: Text(dob == null ? 'Choose date of birth (private)' : 'Date of birth: ${dob!.day.toString().padLeft(2,'0')}/${dob!.month.toString().padLeft(2,'0')}/${dob!.year}')),
+            const Padding(padding: EdgeInsets.only(top:5), child: Text('LAMA is for people aged 12 and older. Your phone number and date of birth are private and only accessible to your account.', style: TextStyle(fontSize:12,color:Colors.black54,height:1.4))),
+            const SizedBox(height: 10),
+          ],
+          TextField(controller: email, keyboardType: TextInputType.emailAddress, autocorrect: false, decoration: const InputDecoration(labelText: 'Email address', prefixIcon: Icon(Icons.mail_outline))),
+          const SizedBox(height: 12),
+          TextField(controller: password, obscureText: obscure, decoration: InputDecoration(labelText: 'Password', prefixIcon: const Icon(Icons.lock_outline), suffixIcon: IconButton(onPressed: () => setState(() => obscure = !obscure), icon: Icon(obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined)))),
+          if (signup) ...[
+            const SizedBox(height: 10),
+            CheckboxListTile(
+              value: consent,
+              onChanged: (v) => setState(() => consent = v ?? false),
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              title: const Text('I acknowledge and consent', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+              subtitle: const Text('I agree to the Terms of Service and Privacy Policy, confirm my details are accurate, and understand that my phone number and date of birth are kept private from other users.', style: TextStyle(fontSize: 12, height: 1.35)),
+            ),
+          ],
+          if (error != null) ...[
+            const SizedBox(height: 12),
+            Container(width: double.infinity, padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: const Color(0xFFFFE9E9), borderRadius: BorderRadius.circular(12)), child: Text(error!, style: const TextStyle(color: Color(0xFF9A2727), fontSize: 13))),
+          ],
+          const SizedBox(height: 18),
+          SizedBox(width: double.infinity, height: 52, child: FilledButton(onPressed: busy ? null : submit, child: busy ? const SizedBox(width:20,height:20,child:CircularProgressIndicator(strokeWidth:2,color:Colors.white)) : Text(signup ? 'Create account' : 'Sign in', style: const TextStyle(fontWeight: FontWeight.w800)))),
+          const SizedBox(height: 12),
+          SizedBox(width: double.infinity, height: 50, child: OutlinedButton.icon(
+            onPressed: busy ? null : googleSignIn,
+            icon: const Icon(Icons.g_mobiledata, size: 30),
+            label: const Text('Continue with Google', style: TextStyle(fontWeight: FontWeight.w800)),
+          )),
+          const SizedBox(height: 12),
+          Center(child: TextButton(onPressed: busy ? null : () => setState(() { signup = !signup; error = null; }), child: Text(signup ? 'Already have an account? Sign in' : 'New here? Create an account'))),
+          const SizedBox(height: 8),
+          const Center(child: Text('Be kind • Respect boundaries • Stay safe', style: TextStyle(fontSize: 12, color: Colors.black45))),
+        ],
+      )),
+    ))),
+  );
+}
+
+class ProfileCompletionGate extends StatefulWidget {
+  const ProfileCompletionGate({super.key});
+  @override State<ProfileCompletionGate> createState() => _ProfileCompletionGateState();
+}
+class _ProfileCompletionGateState extends State<ProfileCompletionGate> {
+  late Future<bool> future;
+  @override void initState() { super.initState(); future = BackendService(Supabase.instance.client).needsProfileCompletion(); }
+  void refresh() => setState(() => future = BackendService(Supabase.instance.client).needsProfileCompletion());
+  @override Widget build(BuildContext context) => FutureBuilder<bool>(
+    future: future,
+    builder: (context, s) {
+      if (s.connectionState == ConnectionState.waiting) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      if (s.hasError) return Scaffold(body: Center(child: Padding(padding: const EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [
+        const Icon(Icons.cloud_off_outlined, size: 42, color: purple),
+        const SizedBox(height: 12),
+        const Text('Could not verify your private profile setup. Run the LAMA profile migration in Supabase, then retry.', textAlign: TextAlign.center),
+        const SizedBox(height: 12),
+        FilledButton(onPressed: refresh, child: const Text('Retry')),
+        TextButton(onPressed: () => Supabase.instance.client.auth.signOut(), child: const Text('Sign out')),
+      ])));
+      if (s.data == true) return ProfileCompletionScreen(onCompleted: refresh);
+      return MainShell(key: ValueKey(Supabase.instance.client.auth.currentUser!.id));
+    },
+  );
+}
+
+class ProfileCompletionScreen extends StatefulWidget {
+  const ProfileCompletionScreen({super.key, required this.onCompleted});
+  final VoidCallback onCompleted;
+  @override State<ProfileCompletionScreen> createState() => _ProfileCompletionScreenState();
+}
+class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
+  final name = TextEditingController();
+  final username = TextEditingController();
+  final phone = TextEditingController();
+  DateTime? dob;
+  bool consent = false, busy = false, checking = false;
+  bool? available;
+  String? error;
+  late final BackendService api = BackendService(Supabase.instance.client);
+
+  @override void initState() { super.initState(); loadExisting(); }
+  @override void dispose() { name.dispose(); username.dispose(); phone.dispose(); super.dispose(); }
+  Future<void> loadExisting() async {
+    try {
+      final p = await api.myProfile();
+      if (!mounted) return;
+      setState(() {
+        name.text = (p['display_name'] ?? '').toString();
+        username.text = (p['username'] ?? '').toString();
+        phone.text = (p['phone_number'] ?? '').toString();
+        if (p['date_of_birth'] != null) dob = DateTime.tryParse(p['date_of_birth'].toString());
+        consent = p['consent_accepted'] == true;
+      });
+    } catch (_) {}
+  }
+  Future<void> checkUsername() async {
+    setState(() { checking = true; available = null; error = null; });
+    try {
+      final result = await api.usernameAvailable(username.text);
+      if (mounted) setState(() { available = result; if (!result) error = 'That username is unavailable.'; });
+    } catch (_) { if (mounted) setState(() => error = 'Could not check username. Run the profile migration and retry.'); }
+    finally { if (mounted) setState(() => checking = false); }
+  }
+  Future<void> chooseDob() async {
+    final now = DateTime.now(); final last = DateTime(now.year - 12, now.month, now.day);
+    final picked = await showDatePicker(context: context, initialDate: dob ?? DateTime(now.year - 18), firstDate: DateTime(1900), lastDate: last);
+    if (picked != null && mounted) setState(() => dob = picked);
+  }
+  Future<void> save() async {
+    setState(() { busy = true; error = null; });
+    try {
+      if (name.text.trim().isEmpty) throw Exception('Enter your name.');
+      if (!RegExp(r'^\\+?[0-9 ()-]{7,20}$').hasMatch(phone.text.trim())) throw Exception('Enter a valid phone number.');
+      if (dob == null) throw Exception('Choose your date of birth.');
+      if (!consent) throw Exception('Please acknowledge and consent before continuing.');
+      await api.completeProfile(displayName: name.text, username: username.text, phoneNumber: phone.text, dateOfBirth: dob!, consentAccepted: consent);
+      widget.onCompleted();
+    } catch (e) {
+      if (mounted) setState(() => error = e.toString().replaceFirst('Exception: ', '').replaceAll(')', ''));
+    } finally { if (mounted) setState(() => busy = false); }
+  }
+  @override Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Complete your LAMA profile'), actions: [TextButton(onPressed: () => api.signOut(), child: const Text('Sign out'))]),
+    body: SafeArea(child: Center(child: SingleChildScrollView(padding: const EdgeInsets.all(24), child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 440), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('One last step', style: TextStyle(fontSize:28,fontWeight:FontWeight.w900,color:dark)),
+        const SizedBox(height:8),
+        const Text('Add the required details to keep your account safe. Your phone number and date of birth are stored separately and only you can read them.', style: TextStyle(color:Colors.black54,height:1.45)),
+        const SizedBox(height:20),
+        TextField(controller:name,textCapitalization:TextCapitalization.words,decoration:const InputDecoration(labelText:'Name')),
+        const SizedBox(height:12),
+        Row(children:[Expanded(child:TextField(controller:username,decoration:const InputDecoration(labelText:'Username',prefixText:'@'),onChanged:(_)=>setState(()=>available=null))),IconButton.filledTonal(onPressed:checking?null:checkUsername,icon:checking?const SizedBox(width:18,height:18,child:CircularProgressIndicator(strokeWidth:2)):const Icon(Icons.check_circle_outline))]),
+        if(available==true)const Text('Username available',style:TextStyle(color:Colors.green,fontSize:12)),
+        const SizedBox(height:12),
+        TextField(controller:phone,keyboardType:TextInputType.phone,decoration:const InputDecoration(labelText:'Phone number (private)')),
+        const SizedBox(height:12),
+        OutlinedButton.icon(onPressed:chooseDob,icon:const Icon(Icons.calendar_month_outlined),label:Text(dob==null?'Choose date of birth (private)':'Date of birth: ${dob!.day.toString().padLeft(2,'0')}/${dob!.month.toString().padLeft(2,'0')}/${dob!.year}')),
+        const SizedBox(height:10),
+        CheckboxListTile(value:consent,onChanged:(v)=>setState(()=>consent=v??false),contentPadding:EdgeInsets.zero,controlAffinity:ListTileControlAffinity.leading,title:const Text('I acknowledge and consent',style:TextStyle(fontWeight:FontWeight.w800,fontSize:13)),subtitle:const Text('I agree to the Terms of Service and Privacy Policy and confirm the information is accurate.',style:TextStyle(fontSize:12,height:1.35))),
+        if(error!=null)Padding(padding:const EdgeInsets.only(top:10),child:Text(error!,style:const TextStyle(color:Colors.red))),
+        const SizedBox(height:16),
+        SizedBox(width:double.infinity,height:52,child:FilledButton(onPressed:busy?null:save,child:busy?const SizedBox(width:20,height:20,child:CircularProgressIndicator(strokeWidth:2,color:Colors.white)):const Text('Save and continue'))),
+      ]),
+    )))),
+  );
 }
 
 class MainShell extends StatefulWidget {
@@ -206,7 +431,7 @@ class _FeedPageState extends State<FeedPage> {
         final author = Map<String,dynamic>.from(p['author'] ?? {});
         final liked = p['liked_by_me'] == true;
         return Card(margin: const EdgeInsets.fromLTRB(16,0,16,12), child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [avatar((author['display_name'] ?? 'Friend').toString(), url: author['avatar_url']?.toString()), const SizedBox(width:10), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text((author['display_name'] ?? 'Friend').toString(), style: const TextStyle(fontWeight:FontWeight.w900,color:dark)), Text('@${author['username'] ?? 'friend'} · ${ago(p['created_at'])}', style: const TextStyle(color:Colors.black45,fontSize:12))])), IconButton(onPressed: () => _reportPost(context,p), icon: const Icon(Icons.more_horiz))]),
+          Row(children: [avatar((author['display_name'] ?? 'Friend').toString(), url: author['avatar_url']?.toString()), const SizedBox(width:10), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text((author['display_name'] ?? 'Friend').toString(), style: const TextStyle(fontWeight:FontWeight.w900,color:dark)), Text('@${author['username'] ?? 'friend'} · ${ago(p['created_at'])}', style: const TextStyle(color:Colors.black45,fontSize:12))])), TextButton.icon(onPressed: () => _reportPost(context,p), icon: const Icon(Icons.visibility_off_outlined, size:18), label: const Text('Ghost'), style: TextButton.styleFrom(foregroundColor: Colors.black54, padding: const EdgeInsets.symmetric(horizontal:8)))]),
           const SizedBox(height:10), Text(p['body'].toString(), style: const TextStyle(height:1.5,fontSize:14,color:dark)),
           const SizedBox(height:10), Row(children: [
             IconButton(onPressed: () async { try { await widget.api.toggleLike(p['id'].toString(), liked); refresh(); } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Like failed: $e'))); } }, icon: Icon(liked ? Icons.favorite_rounded : Icons.favorite_border_rounded, color: liked ? Colors.pink : dark)),
@@ -253,7 +478,7 @@ class _FeedPageState extends State<FeedPage> {
   }
 
   Future<void> _reportPost(BuildContext context, Map<String,dynamic> p) async {
-    final reason = await showDialog<String>(context: context, builder: (ctx) => SimpleDialog(title: const Text('Report this post'), children: ['Spam or scam','Harassment','Inappropriate content','Other'].map((r) => SimpleDialogOption(onPressed: () => Navigator.pop(ctx,r), child: Text(r))).toList()));
+    final reason = await showDialog<String>(context: context, builder: (ctx) => SimpleDialog(title: const Text('Ghost / report this post'), children: ['Spam or scam','Harassment','Inappropriate content','Other'].map((r) => SimpleDialogOption(onPressed: () => Navigator.pop(ctx,r), child: Text(r))).toList()));
     if (reason == null) return;
     try { await widget.api.report(postId:p['id'].toString(),reason:reason); if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Report submitted for review.'))); } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('Report failed: $e'))); }
   }
