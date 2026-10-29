@@ -31,11 +31,12 @@ jobs:
 
       - name: Generate Android platform if missing
         run: |
-          if [ ! -d android ]; then
+          if [ ! -f android/settings.gradle ] && [ ! -f android/settings.gradle.kts ]; then
             flutter create --platforms=android .
           fi
 
       - name: Set launcher label from app config
+        shell: bash
         run: |
           APP_NAME=$(sed -n "s/.*appName = '\\(.*\\)';/\\1/p" lib/config/app_config.dart | head -n 1)
           if [ -z "$APP_NAME" ]; then APP_NAME="PALS"; fi
