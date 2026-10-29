@@ -64,6 +64,23 @@ class BackendService {
     await client.from('posts').insert({'author_id': user!.id, 'body': body.trim()});
   }
 
+  Future<List<Map<String, dynamic>>> comments(String postId) async {
+    final rows = await client.from('comments').select().eq('post_id', postId).order('created_at');
+    final items = List<Map<String, dynamic>>.from(rows);
+    if (items.isEmpty) return items;
+    final ids = items.map((e) => e['author_id'].toString()).toSet().toList();
+    final people = await client.from('profiles').select('id,display_name,username,avatar_url').inFilter('id', ids);
+    final byId = {for (final p in people) p['id'].toString(): Map<String, dynamic>.from(p)};
+    for (final item in items) {
+      item['author'] = byId[item['author_id'].toString()] ?? <String, dynamic>{};
+    }
+    return items;
+  }
+
+  Future<void> addComment(String postId, String body) async {
+    await client.from('comments').insert({'post_id': postId, 'author_id': user!.id, 'body': body.trim()});
+  }
+
   Future<void> toggleLike(String postId, bool currentlyLiked) async {
     if (currentlyLiked) {
       await client.from('post_likes').delete().eq('post_id', postId).eq('user_id', user!.id);
