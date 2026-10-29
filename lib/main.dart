@@ -16,10 +16,20 @@ StreamSubscription<Uri>? _authLinkSubscription;
 Future<void> _handleAuthLink(Uri uri) async {
   if (!AppConfig.hasBackend || uri.scheme != 'io.supabase.flutter' || uri.host != 'login-callback') return;
   try {
-    await Supabase.instance.client.auth.getSessionFromUrl(uri);
-  } catch (error) {
-    // Supabase may already have consumed the callback; avoid crashing app startup.
-    debugPrint('LAMA OAuth callback processing: $error');
+    final auth = Supabase.instance.client.auth;
+    // Supabase OAuth may return either a PKCE authorization code (?code=...)
+    // or implicit-flow tokens in the URI fragment. Handle each explicitly.
+    final code = uri.queryParameters['code'];
+    if (code != null && code.isNotEmpty) {
+      await auth.exchangeCodeForSession(code);
+    } else if (uri.fragment.contains('access_token=')) {
+      await auth.getSessionFromUrl(uri);
+    } else {
+      debugPrint('LAMA OAuth callback arrived without a code or access token: $uri');
+    }
+  } catch (error, stackTrace) {
+    debugPrint('LAMA OAuth callback processing failed: $error');
+    debugPrintStack(stackTrace: stackTrace);
   }
 }
 
