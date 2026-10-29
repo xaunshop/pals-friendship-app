@@ -148,7 +148,8 @@ class _AuthScreenState extends State<AuthScreen> {
         if (!identifier.text.trim().contains('@')) throw Exception('Enter a valid email address.');
         if (password.text.length < 8) throw Exception('Use a password with at least 8 characters.');
         if (!RegExp(r'^[a-z0-9_]{1,35}$').hasMatch(username.text.trim().replaceFirst(RegExp(r'^@'), '').toLowerCase())) throw Exception('Username must be 1–35 characters using letters, numbers or underscores.');
-        if (!RegExp(r'^\\+?[0-9 ()-]{7,20}$').hasMatch(phone.text.trim())) throw Exception('Enter a valid phone number.');
+        final phoneDigits = phone.text.replaceAll(RegExp(r'[^0-9]'), '');
+        if (phoneDigits.length < 7 || phoneDigits.length > 15) throw Exception('Enter a valid phone number.');
         if (dob == null) throw Exception('Choose your date of birth.');
         if (!consent) throw Exception('Please accept the terms and privacy consent.');
         await api.requestSignupOtp(
