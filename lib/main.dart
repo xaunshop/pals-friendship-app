@@ -1,16 +1,42 @@
 import 'package:flutter/material.dart';
+import 'package:app_links/app_links.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'config/app_config.dart';
 import 'services/backend_service.dart';
+import 'dart:async';
 
 const purple = Color(0xFF7357E8);
 const dark = Color(0xFF24213A);
 const background = Color(0xFFF7F6FC);
 
+StreamSubscription<Uri>? _authLinkSubscription;
+
+Future<void> _handleAuthLink(Uri uri) async {
+  if (!AppConfig.hasBackend || uri.scheme != 'io.supabase.flutter' || uri.host != 'login-callback') return;
+  try {
+    await Supabase.instance.client.auth.getSessionFromUrl(uri);
+  } catch (error) {
+    // Supabase may already have consumed the callback; avoid crashing app startup.
+    debugPrint('LAMA OAuth callback processing: $error');
+  }
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (AppConfig.hasBackend) {
     await Supabase.initialize(url: AppConfig.supabaseUrl, anonKey: AppConfig.supabaseAnonKey);
+    final links = AppLinks();
+    _authLinkSubscription = links.uriLinkStream.listen((uri) {
+      unawaited(_handleAuthLink(uri));
+    }, onError: (Object error) {
+      debugPrint('LAMA app link stream: $error');
+    });
+    try {
+      final initialUri = await links.getInitialLink();
+      if (initialUri != null) await _handleAuthLink(initialUri);
+    } catch (error) {
+      debugPrint('LAMA initial OAuth callback: $error');
+    }
   }
   runApp(const PalsApp());
 }
