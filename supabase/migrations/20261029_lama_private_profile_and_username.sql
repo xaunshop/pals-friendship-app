@@ -39,7 +39,7 @@ as $$
   select candidate is not null
     and candidate ~ '^[a-z0-9_]{3,30}$'
     and not exists (
-      select 1 from public.profiles p where lower(p.username) = lower(candidate)
+      select 1 from public.profiles p where lower(p.username) = lower(candidate) and (auth.uid() is null or p.id <> auth.uid())
     );
 $$;
 
