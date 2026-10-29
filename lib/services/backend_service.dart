@@ -83,6 +83,10 @@ class BackendService {
     final rows = await client.from('posts').select().order('created_at', ascending: false).limit(100);
     final items = List<Map<String, dynamic>>.from(rows);
     if (items.isEmpty) return items;
+    final ghostRows = await client.from('ghosted_posts').select('post_id').eq('user_id', user!.id);
+    final ghostedIds = List<Map<String, dynamic>>.from(ghostRows).map((e) => e['post_id'].toString()).toSet();
+    items.removeWhere((post) => ghostedIds.contains(post['id'].toString()));
+    if (items.isEmpty) return items;
     final ids = items.map((e) => e['author_id'].toString()).toSet().toList();
     final profiles = await client.from('profiles').select('id,username,display_name,avatar_url').inFilter('id', ids);
     final byId = {for (final p in profiles) p['id'].toString(): Map<String, dynamic>.from(p)};
@@ -211,6 +215,14 @@ class BackendService {
 
   Future<void> sendMessage(String conversationId, String body) async {
     await client.from('messages').insert({'conversation_id': conversationId, 'sender_id': user!.id, 'body': body.trim()});
+  }
+
+  Future<void> ghostPost(String postId) async {
+    await client.from('ghosted_posts').upsert(
+      {'user_id': user!.id, 'post_id': postId},
+      onConflict: 'user_id,post_id',
+      ignoreDuplicates: true,
+    );
   }
 
   Future<void> report({String? userId, String? postId, required String reason}) async {
