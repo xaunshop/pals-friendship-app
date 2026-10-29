@@ -132,19 +132,8 @@ class BackendService {
   }
 
   Future<String> startConversation(String otherId) async {
-    final existing = await client.from('conversation_members').select('conversation_id').eq('user_id', user!.id);
-    for (final row in List<Map<String, dynamic>>.from(existing)) {
-      final id = row['conversation_id'].toString();
-      final match = await client.from('conversation_members').select('user_id').eq('conversation_id', id).eq('user_id', otherId).maybeSingle();
-      if (match != null) return id;
-    }
-    final conversation = await client.from('conversations').insert({'is_group': false}).select('id').single();
-    final id = conversation['id'].toString();
-    await client.from('conversation_members').insert([
-      {'conversation_id': id, 'user_id': user!.id},
-      {'conversation_id': id, 'user_id': otherId},
-    ]);
-    return id;
+    final result = await client.rpc('create_direct_conversation', params: {'other_user_id': otherId});
+    return result.toString();
   }
 
   Future<List<Map<String, dynamic>>> messages(String conversationId) async {
