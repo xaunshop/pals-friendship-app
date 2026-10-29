@@ -210,12 +210,48 @@ class _FeedPageState extends State<FeedPage> {
           const SizedBox(height:10), Text(p['body'].toString(), style: const TextStyle(height:1.5,fontSize:14,color:dark)),
           const SizedBox(height:10), Row(children: [
             IconButton(onPressed: () async { try { await widget.api.toggleLike(p['id'].toString(), liked); refresh(); } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Like failed: $e'))); } }, icon: Icon(liked ? Icons.favorite_rounded : Icons.favorite_border_rounded, color: liked ? Colors.pink : dark)),
-            Text('${p['likes_count'] ?? 0}', style: const TextStyle(fontWeight:FontWeight.w700)), const SizedBox(width:18), const Icon(Icons.chat_bubble_outline,size:19,color:dark), const SizedBox(width:6), const Text('Comments coming next',style:TextStyle(fontSize:11,color:Colors.black45)),
+            Text('${p['likes_count'] ?? 0}', style: const TextStyle(fontWeight:FontWeight.w700)), const SizedBox(width:18), IconButton(tooltip:'Comments', onPressed:()=>_showComments(context,p), icon:const Icon(Icons.chat_bubble_outline,size:20,color:dark)), Text('${p['comments_count'] ?? 0}',style:const TextStyle(fontWeight:FontWeight.w700)),
           ]),
         ])));
       }).toList());
     }),
   ]));
+  Future<void> _showComments(BuildContext context, Map<String,dynamic> post) async {
+    final controller = TextEditingController();
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setSheet) => Padding(
+        padding: EdgeInsets.fromLTRB(16, 18, 16, MediaQuery.of(ctx).viewInsets.bottom + 16),
+        child: SizedBox(height: MediaQuery.of(ctx).size.height * .68, child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Friendly conversation', style: TextStyle(fontSize:20,fontWeight:FontWeight.w900,color:dark)),
+            const SizedBox(height:12),
+            Expanded(child: FutureBuilder<List<Map<String,dynamic>>>(
+              future: widget.api.comments(post['id'].toString()),
+              builder:(context,s){
+                if(s.connectionState==ConnectionState.waiting)return const Center(child:CircularProgressIndicator());
+                if(s.hasError)return const Center(child:Text('Could not load comments.'));
+                final rows=s.data??[];
+                if(rows.isEmpty)return const Center(child:Text('No replies yet. Start kindly.'));
+                return ListView(children:rows.map((c){final author=Map<String,dynamic>.from(c['author']??{});return ListTile(contentPadding:EdgeInsets.zero,leading:avatar((author['display_name']??'Friend').toString(),size:36),title:Text((author['display_name']??'Friend').toString(),style:const TextStyle(fontWeight:FontWeight.w800)),subtitle:Text(c['body'].toString()));}).toList());
+              },
+            )),
+            const SizedBox(height:8),
+            Row(children:[
+              Expanded(child:TextField(controller:controller,maxLength:1000,maxLines:2,decoration:const InputDecoration(hintText:'Write a friendly reply...'))),
+              const SizedBox(width:8),
+              IconButton.filled(onPressed:()async{final body=controller.text.trim();if(body.isEmpty)return;try{await widget.api.addComment(post['id'].toString(),body);controller.clear();if(mounted){Navigator.pop(ctx);setState(()=>future=widget.api.posts());}}catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('Comment failed: $e')));}},icon:const Icon(Icons.send),style:IconButton.styleFrom(backgroundColor:purple,foregroundColor:Colors.white)),
+            ]),
+          ],
+        )),
+      )),
+    );
+    controller.dispose();
+  }
+
   Future<void> _reportPost(BuildContext context, Map<String,dynamic> p) async {
     final reason = await showDialog<String>(context: context, builder: (ctx) => SimpleDialog(title: const Text('Report this post'), children: ['Spam or scam','Harassment','Inappropriate content','Other'].map((r) => SimpleDialogOption(onPressed: () => Navigator.pop(ctx,r), child: Text(r))).toList()));
     if (reason == null) return;
