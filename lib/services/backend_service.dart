@@ -10,6 +10,64 @@ class BackendService {
     await client.auth.signInWithPassword(email: email.trim(), password: password);
   }
 
+  Future<void> requestSignupOtp({
+    required String email,
+    required String password,
+    required String displayName,
+    required String username,
+    required String phoneNumber,
+    required DateTime dateOfBirth,
+    required bool consentAccepted,
+  }) async {
+    if (!consentAccepted) throw Exception('Please accept the terms and privacy consent.');
+    if (ageOn(dateOfBirth) < 12) throw Exception('You must be at least 12 years old to use LAMA.');
+    final cleanUsername = username.trim().replaceFirst(RegExp(r'^@'), '').toLowerCase();
+    if (!RegExp(r'^[a-z0-9_]{1,35}$').hasMatch(cleanUsername)) {
+      throw Exception('Username must be 1–35 characters using letters, numbers or underscores.');
+    }
+    if (!await usernameAvailable(cleanUsername)) throw Exception('That username is already taken. Try another one.');
+    await client.auth.signUp(
+      email: email.trim(),
+      password: password,
+      data: {
+        'display_name': displayName.trim(),
+        'username': cleanUsername,
+        'phone_number': phoneNumber.trim(),
+        'date_of_birth': dateOfBirth.toIso8601String().split('T').first,
+        'consent_accepted': consentAccepted,
+      },
+    );
+  }
+
+  Future<void> verifySignupOtp({required String email, required String token}) async {
+    await client.auth.verifyOTP(
+      type: OtpType.signup,
+      email: email.trim(),
+      token: token.trim(),
+    );
+  }
+
+  Future<void> resendSignupOtp(String email) async {
+    await client.auth.resend(type: OtpType.signup, email: email.trim());
+  }
+
+  Future<void> signInWithUsernameOrEmail(String identifier, String password) async {
+    final value = identifier.trim();
+    if (value.contains('@')) {
+      await signIn(value, password);
+      return;
+    }
+    final response = await client.functions.invoke(
+      'username-login',
+      body: {'username': value.replaceFirst(RegExp(r'^@'), '').toLowerCase(), 'password': password},
+    );
+    final data = response.data;
+    if (data is! Map || data['access_token'] is! String || data['refresh_token'] is! String) {
+      throw Exception('Username sign-in failed. Check your username and password.');
+    }
+    await client.auth.setSession(data['refresh_token'] as String);
+  }
+
   Future<void> signUp({
     required String email, required String password, required String displayName,
     required String username, required String phoneNumber, required DateTime dateOfBirth,
