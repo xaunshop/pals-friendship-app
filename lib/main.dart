@@ -131,7 +131,7 @@ class _HomeShellState extends State<HomeShell> {
   Widget postCard(SocialPost p) => Card(margin:const EdgeInsets.fromLTRB(16,6,16,10),child:Padding(padding:const EdgeInsets.all(16),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
     Row(children:[CircleAvatar(backgroundColor:p.color,child:Text(p.initials,style:const TextStyle(color:ink,fontWeight:FontWeight.bold))),const SizedBox(width:10),Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text(p.author,style:const TextStyle(fontWeight:FontWeight.w800)),Text('${p.handle} · ${p.time} ago',style:TextStyle(color:Colors.grey.shade500,fontSize:12))])),IconButton(onPressed:()=>showPostMenu(p),icon:const Icon(Icons.more_horiz))]),
     const SizedBox(height:10),Text(p.body,style:const TextStyle(fontSize:14,height:1.45)),
-    const SizedBox(height:10),Row(children:[IconButton(onPressed:()=>setState(()=>{p.liked=!p.liked;p.likes+=p.liked?1:-1;}),icon:Icon(p.liked?Icons.favorite:Icons.favorite_border,color:p.liked?Colors.pink:ink)),Text('${p.likes}'),const SizedBox(width:18),IconButton(onPressed:()=>comments(p),icon:const Icon(Icons.chat_bubble_outline)),Text('${p.comments}'),const Spacer(),IconButton(onPressed:()=>toast('Post saved on this device (demo).'),icon:const Icon(Icons.bookmark_border))]),
+    const SizedBox(height:10),Row(children:[IconButton(onPressed:()=>setState(() { p.liked = !p.liked; p.likes += p.liked ? 1 : -1; }),icon:Icon(p.liked?Icons.favorite:Icons.favorite_border,color:p.liked?Colors.pink:ink)),Text('${p.likes}'),const SizedBox(width:18),IconButton(onPressed:()=>comments(p),icon:const Icon(Icons.chat_bubble_outline)),Text('${p.comments}'),const Spacer(),IconButton(onPressed:()=>toast('Post saved on this device (demo).'),icon:const Icon(Icons.bookmark_border))]),
   ])));
   void showPostMenu(SocialPost p) => showModalBottomSheet(context:context,builder:(ctx)=>SafeArea(child:Column(mainAxisSize:MainAxisSize.min,children:[
     ListTile(leading:const Icon(Icons.flag_outlined),title:const Text('Report post'),onTap:(){Navigator.pop(ctx);report(p.author);}),
@@ -151,7 +151,7 @@ class _HomeShellState extends State<HomeShell> {
     ...communities.map((c)=>Card(margin:const EdgeInsets.fromLTRB(16,8,16,4),child:Padding(padding:const EdgeInsets.all(12),child:Row(children:[
       Container(width:54,height:54,decoration:BoxDecoration(color:const Color(0xFFEDE9FF),borderRadius:BorderRadius.circular(16)),child:Icon(c.icon,color:violet,size:27)),const SizedBox(width:12),
       Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text(c.name,style:const TextStyle(fontWeight:FontWeight.w800)),Text(c.category,style:const TextStyle(color:violet,fontSize:12)),const SizedBox(height:4),Text(c.description,style:TextStyle(color:Colors.grey.shade600,fontSize:12)),Text('${compact(c.members)} members',style:TextStyle(color:Colors.grey.shade500,fontSize:11))])),
-      const SizedBox(width:8),OutlinedButton(onPressed:()=>setState(()=>{c.joined=!c.joined;c.members+=c.joined?1:-1;}),child:Text(c.joined?'Joined ✓':'Join')),
+      const SizedBox(width:8),OutlinedButton(onPressed:()=>setState(() { c.joined = !c.joined; c.members += c.joined ? 1 : -1; }),child:Text(c.joined?'Joined ✓':'Join')),
     ])))),
   ]);
   Widget messagesPage() => Column(children:[
@@ -195,7 +195,7 @@ class _HomeShellState extends State<HomeShell> {
   ])));}
   void editProfile(){final name=TextEditingController(text:displayName);final about=TextEditingController(text:bio);showDialog(context:context,builder:(ctx)=>AlertDialog(title:const Text('Edit profile'),content:Column(mainAxisSize:MainAxisSize.min,children:[
     TextField(controller:name,decoration:const InputDecoration(labelText:'Display name')),const SizedBox(height:12),TextField(controller:about,maxLines:3,decoration:const InputDecoration(labelText:'About you')),
-  ]),actions:[TextButton(onPressed:()=>Navigator.pop(ctx),child:const Text('Cancel')),FilledButton(onPressed:(){if(name.text.trim().isNotEmpty)setState(()=>{displayName=name.text.trim();bio=about.text.trim();});Navigator.pop(ctx);},child:const Text('Save'))]));}
+  ]),actions:[TextButton(onPressed:()=>Navigator.pop(ctx),child:const Text('Cancel')),FilledButton(onPressed:(){if(name.text.trim().isNotEmpty)setState(() { displayName = name.text.trim(); bio = about.text.trim(); });Navigator.pop(ctx);},child:const Text('Save'))]));}
   void privacy()=>showModalBottomSheet(context:context,builder:(ctx)=>SafeArea(child:Padding(padding:const EdgeInsets.all(20),child:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.start,children:[
     const Text('Privacy & safety',style:TextStyle(fontWeight:FontWeight.w800,fontSize:21)),const SizedBox(height:8),const Text('Stay in control of your experience.',style:TextStyle(color:Colors.grey)),
     ListTile(leading:const Icon(Icons.flag_outlined),title:const Text('Report a concern'),onTap:(){Navigator.pop(ctx);report('community content');}),
