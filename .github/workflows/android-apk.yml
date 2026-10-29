@@ -40,9 +40,23 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
+
           path = Path("android/app/src/main/AndroidManifest.xml")
           manifest = path.read_text()
-          if 'android:scheme="io.supabase.flutter"' not in manifest:
+
+          # Flutter's OAuth callback must be handled by the app's MainActivity.
+          match = re.search(r'<activity\\b(?=[^>]*android:name="[^"]*MainActivity")[^>]*>.*?</activity>', manifest, re.S)
+          if not match:
+              raise SystemExit("Could not find MainActivity in AndroidManifest.xml")
+
+          activity = match.group(0)
+          if "android:launchMode=" not in activity:
+              activity = activity.replace("<activity", '<activity android:launchMode="singleTop"', 1)
+          elif re.search(r'android:launchMode="[^"]+"', activity):
+              activity = re.sub(r'android:launchMode="[^"]+"', 'android:launchMode="singleTop"', activity, count=1)
+
+          if 'android:scheme="io.supabase.flutter"' not in activity:
               intent_filter = '''
                   <intent-filter>
                       <action android:name="android.intent.action.VIEW" />
@@ -51,8 +65,11 @@ jobs:
                       <data android:scheme="io.supabase.flutter" android:host="login-callback" />
                   </intent-filter>
               '''
-              manifest = manifest.replace("</activity>", intent_filter + "\n        </activity>", 1)
-              path.write_text(manifest)
+              activity = activity.replace("</activity>", intent_filter + "\\n        </activity>", 1)
+
+          manifest = manifest[:match.start()] + activity + manifest[match.end():]
+          path.write_text(manifest)
+          print("Configured MainActivity for io.supabase.flutter://login-callback/ and singleTop launch mode.")
           PY
 
       - name: Set launcher label from app config
