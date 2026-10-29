@@ -92,37 +92,101 @@ class AuthScreen extends StatefulWidget {
 }
 
 class _AuthScreenState extends State<AuthScreen> {
-  final email = TextEditingController();
+  final identifier = TextEditingController();
   final password = TextEditingController();
-  bool busy = false, showEmailSignIn = false, obscure = true;
+  final name = TextEditingController();
+  final username = TextEditingController();
+  final phone = TextEditingController();
+  final otp = TextEditingController();
+  DateTime? dob;
+  bool signup = false, waitingForOtp = false, busy = false, obscure = true, consent = false, checkingUsername = false;
+  bool? usernameAvailable;
   String? error;
+  late final BackendService api = BackendService(Supabase.instance.client);
 
   @override
   void dispose() {
-    email.dispose();
-    password.dispose();
+    identifier.dispose(); password.dispose(); name.dispose(); username.dispose(); phone.dispose(); otp.dispose();
     super.dispose();
   }
 
-  Future<void> googleSignIn() async {
+  Future<void> chooseDob() async {
+    final now = DateTime.now();
+    final last = DateTime(now.year - 12, now.month, now.day);
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: dob ?? DateTime(now.year - 18, now.month, now.day),
+      firstDate: DateTime(1900),
+      lastDate: last,
+      helpText: 'You must be at least 12 years old',
+    );
+    if (picked != null && mounted) setState(() { dob = picked; error = null; });
+  }
+
+  Future<void> checkUsername() async {
+    final value = username.text.trim().replaceFirst(RegExp(r'^@'), '').toLowerCase();
+    if (!RegExp(r'^[a-z0-9_]{1,35}$').hasMatch(value)) {
+      setState(() { usernameAvailable = false; error = 'Use 1–35 lowercase letters, numbers or underscores.'; });
+      return;
+    }
+    setState(() { checkingUsername = true; usernameAvailable = null; error = null; });
+    try {
+      final result = await api.usernameAvailable(value);
+      if (mounted) setState(() { usernameAvailable = result; if (!result) error = 'That username is unavailable.'; });
+    } catch (_) {
+      if (mounted) setState(() => error = 'Could not check username. Confirm the LAMA database migration has run.');
+    } finally {
+      if (mounted) setState(() => checkingUsername = false);
+    }
+  }
+
+  Future<void> submit() async {
     setState(() { busy = true; error = null; });
     try {
-      await BackendService(Supabase.instance.client).signInWithGoogle();
+      if (signup) {
+        if (name.text.trim().isEmpty) throw Exception('Enter your name.');
+        if (!identifier.text.trim().contains('@')) throw Exception('Enter a valid email address.');
+        if (password.text.length < 8) throw Exception('Use a password with at least 8 characters.');
+        if (!RegExp(r'^[a-z0-9_]{1,35}$').hasMatch(username.text.trim().replaceFirst(RegExp(r'^@'), '').toLowerCase())) throw Exception('Username must be 1–35 characters using letters, numbers or underscores.');
+        if (!RegExp(r'^\\+?[0-9 ()-]{7,20}$').hasMatch(phone.text.trim())) throw Exception('Enter a valid phone number.');
+        if (dob == null) throw Exception('Choose your date of birth.');
+        if (!consent) throw Exception('Please accept the terms and privacy consent.');
+        await api.requestSignupOtp(
+          email: identifier.text, password: password.text, displayName: name.text,
+          username: username.text, phoneNumber: phone.text, dateOfBirth: dob!, consentAccepted: consent,
+        );
+        if (mounted) setState(() { waitingForOtp = true; error = 'We sent a verification code to your email. Enter it below.'; });
+      } else {
+        if (identifier.text.trim().isEmpty) throw Exception('Enter your email or username.');
+        if (password.text.isEmpty) throw Exception('Enter your password.');
+        await api.signInWithUsernameOrEmail(identifier.text, password.text);
+      }
     } catch (e) {
-      if (mounted) setState(() => error = 'Google sign-in failed: ${e.toString().replaceFirst('Exception: ', '')}');
+      if (mounted) setState(() => error = e.toString().replaceFirst('Exception: ', '').replaceAll(')', ''));
     } finally {
       if (mounted) setState(() => busy = false);
     }
   }
 
-  Future<void> emailSignIn() async {
+  Future<void> verifyOtp() async {
     setState(() { busy = true; error = null; });
     try {
-      if (email.text.trim().isEmpty || !email.text.contains('@')) throw Exception('Enter a valid email address.');
-      if (password.text.isEmpty) throw Exception('Enter your password.');
-      await BackendService(Supabase.instance.client).signIn(email.text, password.text);
+      if (!RegExp(r'^\\d{6}$').hasMatch(otp.text.trim())) throw Exception('Enter the 6-digit code from your email.');
+      await api.verifySignupOtp(email: identifier.text, token: otp.text);
     } catch (e) {
-      if (mounted) setState(() => error = e.toString().replaceFirst('Exception: ', '').replaceAll(')', ''));
+      if (mounted) setState(() => error = 'Could not verify code: ${e.toString().replaceFirst('Exception: ', '').replaceAll(')', '')}');
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Future<void> resendOtp() async {
+    setState(() { busy = true; error = null; });
+    try {
+      await api.resendSignupOtp(identifier.text);
+      if (mounted) setState(() => error = 'A new verification code has been sent.');
+    } catch (e) {
+      if (mounted) setState(() => error = 'Could not resend code: ${e.toString().replaceFirst('Exception: ', '')}');
     } finally {
       if (mounted) setState(() => busy = false);
     }
@@ -136,34 +200,49 @@ class _AuthScreenState extends State<AuthScreen> {
         crossAxisAlignment: CrossAxisAlignment.start, children: [
           Container(width: 64, height: 64, decoration: BoxDecoration(color: purple, borderRadius: BorderRadius.circular(21)), child: const Icon(Icons.diversity_3_rounded, color: Colors.white, size: 34)),
           const SizedBox(height: 24),
-          const Text('Good friends start here.', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900, color: dark, letterSpacing: -.7)),
+          Text(waitingForOtp ? 'Check your inbox.' : signup ? 'Join the circle.' : 'Good friends start here.', style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w900, color: dark, letterSpacing: -.7)),
           const SizedBox(height: 8),
-          const Text('A social space for shared interests, good conversations and platonic friendships.', style: TextStyle(color: Colors.black54, height: 1.45)),
-          const SizedBox(height: 28),
-          SizedBox(width: double.infinity, height: 54, child: FilledButton.icon(
-            onPressed: busy ? null : googleSignIn,
-            icon: const Icon(Icons.g_mobiledata, size: 32),
-            label: Text(busy ? 'Connecting…' : 'Continue with Google', style: const TextStyle(fontWeight: FontWeight.w800)),
-          )),
-          const SizedBox(height: 14),
-          Center(child: TextButton(
-            onPressed: busy ? null : () => setState(() { showEmailSignIn = !showEmailSignIn; error = null; }),
-            child: Text(showEmailSignIn ? 'Hide email sign-in' : 'Already have an account? Sign in with email'),
-          )),
-          if (showEmailSignIn) ...[
-            const SizedBox(height: 8),
-            TextField(controller: email, keyboardType: TextInputType.emailAddress, autocorrect: false, decoration: const InputDecoration(labelText: 'Email address', prefixIcon: Icon(Icons.mail_outline))),
+          Text(waitingForOtp ? 'Enter the 6-digit email verification code to activate your LAMA account.' : 'A social space for shared interests, good conversations and platonic friendships.', style: const TextStyle(color: Colors.black54, height: 1.45)),
+          const SizedBox(height: 24),
+          if (waitingForOtp) ...[
+            TextField(controller: otp, keyboardType: TextInputType.number, maxLength: 6, decoration: const InputDecoration(labelText: 'Email verification code', prefixIcon: Icon(Icons.mark_email_read_outlined))),
+            const SizedBox(height: 12),
+            SizedBox(width: double.infinity, height: 52, child: FilledButton(onPressed: busy ? null : verifyOtp, child: Text(busy ? 'Verifying…' : 'Verify email and continue'))),
+            Center(child: TextButton(onPressed: busy ? null : resendOtp, child: const Text('Resend code'))),
+          ] else ...[
+            if (signup) ...[
+              TextField(controller: name, textCapitalization: TextCapitalization.words, decoration: const InputDecoration(labelText: 'Name', prefixIcon: Icon(Icons.person_outline))),
+              const SizedBox(height: 12),
+              Row(children: [
+                Expanded(child: TextField(controller: username, autocorrect: false, onChanged: (_) => setState(() => usernameAvailable = null), decoration: const InputDecoration(labelText: 'Username', prefixText: '@'))),
+                const SizedBox(width: 8),
+                IconButton.filledTonal(onPressed: checkingUsername ? null : checkUsername, tooltip: 'Check username', icon: checkingUsername ? const SizedBox(width:18,height:18,child:CircularProgressIndicator(strokeWidth:2)) : const Icon(Icons.check_circle_outline)),
+              ]),
+              if (usernameAvailable == true) const Padding(padding: EdgeInsets.only(top:5,left:4), child: Text('Username available', style: TextStyle(color: Colors.green, fontSize: 12))),
+              const SizedBox(height: 12),
+              TextField(controller: phone, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Phone number (private)', prefixIcon: Icon(Icons.phone_outlined))),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(onPressed: chooseDob, icon: const Icon(Icons.calendar_month_outlined), label: Text(dob == null ? 'Choose date of birth (private)' : 'Date of birth: ${dob!.day.toString().padLeft(2,'0')}/${dob!.month.toString().padLeft(2,'0')}/${dob!.year}')),
+              const SizedBox(height: 8),
+              CheckboxListTile(value: consent, onChanged: (v) => setState(() => consent = v ?? false), contentPadding: EdgeInsets.zero, controlAffinity: ListTileControlAffinity.leading, title: const Text('I acknowledge and consent', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13)), subtitle: const Text('I agree to the Terms of Service and Privacy Policy and confirm my details are accurate.', style: TextStyle(fontSize: 12, height: 1.35))),
+              const SizedBox(height: 8),
+            ],
+            TextField(controller: identifier, keyboardType: signup ? TextInputType.emailAddress : TextInputType.text, autocorrect: false, decoration: InputDecoration(labelText: signup ? 'Email address' : 'Email or username', prefixIcon: const Icon(Icons.mail_outline))),
             const SizedBox(height: 12),
             TextField(controller: password, obscureText: obscure, decoration: InputDecoration(labelText: 'Password', prefixIcon: const Icon(Icons.lock_outline), suffixIcon: IconButton(onPressed: () => setState(() => obscure = !obscure), icon: Icon(obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined)))),
-            const SizedBox(height: 14),
-            SizedBox(width: double.infinity, height: 50, child: OutlinedButton(onPressed: busy ? null : emailSignIn, child: const Text('Sign in'))),
+            if (error != null) ...[
+              const SizedBox(height: 12),
+              Container(width: double.infinity, padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: error!.startsWith('We sent') ? const Color(0xFFE8F7EC) : const Color(0xFFFFE9E9), borderRadius: BorderRadius.circular(12)), child: Text(error!, style: TextStyle(color: error!.startsWith('We sent') ? const Color(0xFF176B35) : const Color(0xFF9A2727), fontSize: 13))),
+            ],
+            const SizedBox(height: 18),
+            SizedBox(width: double.infinity, height: 52, child: FilledButton(onPressed: busy ? null : submit, child: busy ? const SizedBox(width:20,height:20,child:CircularProgressIndicator(strokeWidth:2,color:Colors.white)) : Text(signup ? 'Send email verification code' : 'Sign in', style: const TextStyle(fontWeight: FontWeight.w800)))),
+            const SizedBox(height: 12),
+            Center(child: TextButton(onPressed: busy ? null : () => setState(() { signup = !signup; error = null; waitingForOtp = false; }), child: Text(signup ? 'Already have an account? Sign in' : 'New to LAMA? Create account with email'))),
           ],
-          if (error != null) ...[
-            const SizedBox(height: 14),
-            Container(width: double.infinity, padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: const Color(0xFFFFE9E9), borderRadius: BorderRadius.circular(12)), child: Text(error!, style: const TextStyle(color: Color(0xFF9A2727), fontSize: 13))),
+          if (error != null && waitingForOtp) ...[
+            const SizedBox(height: 10),
+            Text(error!, style: const TextStyle(color: purple, fontSize: 13)),
           ],
-          const SizedBox(height: 22),
-          const Center(child: Text('New to LAMA? Continue with Google to create your account, then complete your profile.', textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: Colors.black54, height: 1.4))),
           const SizedBox(height: 12),
           const Center(child: Text('Be kind • Respect boundaries • Stay safe', style: TextStyle(fontSize: 12, color: Colors.black45))),
         ],
