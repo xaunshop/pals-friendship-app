@@ -498,6 +498,7 @@ class _FeedPageState extends State<FeedPage> {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not ghost post: $e')));
     }
   }
+}
 
 class DiscoverPage extends StatefulWidget {
   const DiscoverPage({super.key, required this.api});
