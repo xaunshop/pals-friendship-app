@@ -620,6 +620,13 @@ class _ProfilePageState extends State<ProfilePage>{
         Text('@${p['username']??'friend'}',style:const TextStyle(color:purple,fontWeight:FontWeight.w700)),
         Padding(padding:const EdgeInsets.fromLTRB(30,10,30,22),child:Text((p['bio']??'Add a little introduction about yourself.').toString(),textAlign:TextAlign.center,style:const TextStyle(color:Colors.black54,height:1.45))),
         Padding(padding:const EdgeInsets.symmetric(horizontal:16),child:Card(child:Column(children:[
+          ListTile(
+            leading: const Icon(Icons.lock_outline, color: purple),
+            title: const Text('Private details — only you can see these'),
+            subtitle: Text('Phone: ${(p['phone_number'] ?? 'Not added').toString()}\\nDate of birth: ${(p['date_of_birth'] ?? 'Not added').toString()}'),
+            isThreeLine: true,
+          ),
+          const Divider(height:1),
           ListTile(leading:const Icon(Icons.edit_outlined,color:purple),title:const Text('Edit profile'),trailing:const Icon(Icons.chevron_right),onTap:()=>edit(p)),
           SwitchListTile(secondary:const Icon(Icons.lock_outline,color:purple),title:const Text('Private profile'),subtitle:const Text('Control your visibility in the community'),value:private,onChanged:(v)async{try{await widget.api.updateProfile(displayName:(p['display_name']??'Friend').toString(),bio:(p['bio']??'').toString(),username:(p['username']??'friend').toString(),isPrivate:v);if(mounted)setState(()=>future=widget.api.myProfile());}catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('Could not update privacy: $e')));}}),
           ListTile(leading:const Icon(Icons.shield_outlined,color:purple),title:const Text('Safety & community rules'),subtitle:const Text('Friendship only. No harassment or spam.'),onTap:()=>showAboutDialog(context:context,applicationName:AppConfig.appName,children:const[Text('This community is for platonic friendships and shared interests. Block and report harmful behavior. Do not share passwords, financial details or your home address.') ])),
