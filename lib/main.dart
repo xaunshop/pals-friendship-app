@@ -1,40 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:app_links/app_links.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'config/app_config.dart';
 import 'services/backend_service.dart';
-import 'dart:async';
 
 const purple = Color(0xFF7357E8);
 const dark = Color(0xFF24213A);
 const background = Color(0xFFF7F6FC);
 
-// Supabase Flutter already processes OAuth deep links when its auth client
-// is initialized. Keep a listener only for diagnostics; do not exchange the
-// same PKCE code a second time, which can consume the one-time code twice.
-StreamSubscription<Uri>? _authLinkSubscription;
-
-void _observeAuthLink(Uri uri) {
-  if (!AppConfig.hasBackend || uri.scheme != 'io.supabase.flutter' || uri.host != 'login-callback') return;
-  debugPrint('LAMA received OAuth return link. Query keys: ${uri.queryParameters.keys.toList()}');
-}
-
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (AppConfig.hasBackend) {
     await Supabase.initialize(url: AppConfig.supabaseUrl, anonKey: AppConfig.supabaseAnonKey);
-    final links = AppLinks();
-    _authLinkSubscription = links.uriLinkStream.listen((uri) {
-      _observeAuthLink(uri);
-    }, onError: (Object error) {
-      debugPrint('LAMA app link stream: $error');
-    });
-    try {
-      final initialUri = await links.getInitialLink();
-      if (initialUri != null) _observeAuthLink(initialUri);
-    } catch (error) {
-      debugPrint('LAMA initial OAuth callback: $error');
-    }
   }
   runApp(const PalsApp());
 }
