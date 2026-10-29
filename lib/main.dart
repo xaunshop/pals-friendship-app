@@ -133,8 +133,18 @@ class _AuthScreenState extends State<AuthScreen> {
     try {
       final result = await api.usernameAvailable(value);
       if (mounted) setState(() { usernameAvailable = result; if (!result) error = 'That username is unavailable.'; });
-    } catch (_) {
-      if (mounted) setState(() => error = 'Could not check username. Confirm the LAMA database migration has run.');
+    } catch (e) {
+      if (mounted) {
+        final message = e.toString();
+        final friendly = message.contains('SocketException') || message.contains('Failed host lookup')
+            ? 'Cannot reach Supabase. Check internet connection and the SUPABASE_URL build setting.'
+            : message.contains('401') || message.contains('Invalid API key')
+                ? 'Supabase rejected the app key. Check SUPABASE_ANON_KEY and rebuild.'
+                : message.contains('404') || message.contains('PGRST202') || message.contains('is_username_available')
+                    ? 'Supabase username function is missing or its API schema needs refreshing. Check the migration and reload the API schema.'
+                    : 'Username check failed: $message';
+        setState(() => error = friendly);
+      }
     } finally {
       if (mounted) setState(() => checkingUsername = false);
     }
