@@ -266,13 +266,38 @@ class DiscoverPage extends StatefulWidget {
 }
 class _DiscoverPageState extends State<DiscoverPage> {
   late Future<List<Map<String,dynamic>>> future;
+  late Future<List<Map<String,dynamic>>> requestsFuture;
   final Set<String> sent = {};
   final search = TextEditingController();
-  @override void initState() { super.initState(); future = widget.api.people(); }
+  @override void initState() { super.initState(); future = widget.api.people(); requestsFuture = widget.api.friendRequests(); }
   @override void dispose() { search.dispose(); super.dispose(); }
   @override Widget build(BuildContext context) => ListView(padding: const EdgeInsets.only(bottom:30), children: [
-    PageHeader('Find your people', subtitle:'Friendship starts with shared interests.', trailing:IconButton(onPressed:()=>setState(()=>future=widget.api.people()),icon:const Icon(Icons.refresh))),
+    PageHeader('Find your people', subtitle:'Friendship starts with shared interests.', trailing:IconButton(onPressed:()=>setState((){future=widget.api.people();requestsFuture=widget.api.friendRequests();}),icon:const Icon(Icons.refresh))),
     Padding(padding:const EdgeInsets.symmetric(horizontal:16),child:TextField(controller:search,onChanged:(_)=>setState((){}),decoration:const InputDecoration(prefixIcon:Icon(Icons.search),hintText:'Search names or usernames'))),
+    FutureBuilder<List<Map<String,dynamic>>>(future:requestsFuture,builder:(context,rs){
+      if(rs.connectionState==ConnectionState.waiting)return const SizedBox.shrink();
+      if(rs.hasError)return const SizedBox.shrink();
+      final all=rs.data??[];
+      final me=widget.api.user!.id;
+      final incoming=all.where((r)=>r['status']=='pending'&&r['addressee_id']==me).toList();
+      final accepted=all.where((r)=>r['status']=='accepted').toList();
+      final outgoing=all.where((r)=>r['status']=='pending'&&r['requester_id']==me).toList();
+      if(incoming.isEmpty&&accepted.isEmpty&&outgoing.isEmpty)return const SizedBox.shrink();
+      return Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+        if(incoming.isNotEmpty)...[
+          const Padding(padding:EdgeInsets.fromLTRB(20,20,20,10),child:Text('Friend requests',style:TextStyle(fontSize:19,fontWeight:FontWeight.w900,color:dark))),
+          ...incoming.map((r){final p=Map<String,dynamic>.from(r['other']??{});return Card(margin:const EdgeInsets.fromLTRB(16,0,16,8),child:ListTile(leading:avatar((p['display_name']??'Friend').toString()),title:Text((p['display_name']??'Friend').toString(),style:const TextStyle(fontWeight:FontWeight.w800)),subtitle:Text('@${p['username']??'friend'}'),trailing:Wrap(spacing:4,children:[
+            IconButton(tooltip:'Decline',onPressed:()async{try{await widget.api.respondFriendRequest(r['id'].toString(),'declined');if(mounted)setState(()=>requestsFuture=widget.api.friendRequests());}catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('Could not decline: $e')));}},icon:const Icon(Icons.close,color:Colors.redAccent)),
+            IconButton(tooltip:'Accept',onPressed:()async{try{await widget.api.respondFriendRequest(r['id'].toString(),'accepted');if(mounted)setState(()=>requestsFuture=widget.api.friendRequests());}catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('Could not accept: $e')));}},icon:const Icon(Icons.check_circle,color:purple)),
+          ])));}),
+        ],
+        if(accepted.isNotEmpty)...[
+          const Padding(padding:EdgeInsets.fromLTRB(20,16,20,10),child:Text('Your friends',style:TextStyle(fontSize:19,fontWeight:FontWeight.w900,color:dark))),
+          ...accepted.map((r){final p=Map<String,dynamic>.from(r['other']??{});final otherId=(r['requester_id']==me?r['addressee_id']:r['requester_id']).toString();return Card(margin:const EdgeInsets.fromLTRB(16,0,16,8),child:ListTile(leading:avatar((p['display_name']??'Friend').toString()),title:Text((p['display_name']??'Friend').toString(),style:const TextStyle(fontWeight:FontWeight.w800)),subtitle:Text('@${p['username']??'friend'}'),trailing:IconButton(tooltip:'Message friend',onPressed:()async{try{final id=await widget.api.startConversation(otherId);if(context.mounted)await Navigator.push(context,MaterialPageRoute(builder:(_)=>ChatScreen(api:widget.api,conversationId:id,title:(p['display_name']??'Friend').toString())));if(mounted)setState(()=>requestsFuture=widget.api.friendRequests());}catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('Could not start chat: $e')));}},icon:const Icon(Icons.chat_bubble_outline,color:purple))));}),
+        ],
+        if(outgoing.isNotEmpty)Padding(padding:const EdgeInsets.fromLTRB(20,8,20,8),child:Text('${outgoing.length} friend request${outgoing.length==1?'':'s'} waiting for a reply',style:const TextStyle(color:Colors.black45,fontSize:12))),
+      ]);
+    }),
     const Padding(padding:EdgeInsets.fromLTRB(20,22,20,12),child:Text('People to know',style:TextStyle(fontSize:19,fontWeight:FontWeight.w900,color:dark))),
     FutureBuilder<List<Map<String,dynamic>>>(future:future,builder:(context,s){
       if(s.connectionState==ConnectionState.waiting)return const Padding(padding:EdgeInsets.all(30),child:Center(child:CircularProgressIndicator()));
