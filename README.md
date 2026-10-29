@@ -11,7 +11,7 @@ LAMA is a Flutter Android social app focused on **platonic friendships**, shared
 - Phone number and date of birth stored in a separate table with row-level security allowing only the account owner to read them
 - Shared feed with posts, likes and comments
 - Discover members, send friend requests, join interest communities and chat with accepted friends
-- A “Ghost” post action that submits a report for moderation
+- A persistent “Ghost” action that hides selected posts from that account’s feed
 - GitHub Actions release APK workflow
 
 ## Backend setup
