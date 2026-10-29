@@ -9,28 +9,14 @@ const purple = Color(0xFF7357E8);
 const dark = Color(0xFF24213A);
 const background = Color(0xFFF7F6FC);
 
-// The global subscription must stay alive for incoming OAuth links.
-// ignore: unused_element
+// Supabase Flutter already processes OAuth deep links when its auth client
+// is initialized. Keep a listener only for diagnostics; do not exchange the
+// same PKCE code a second time, which can consume the one-time code twice.
 StreamSubscription<Uri>? _authLinkSubscription;
 
-Future<void> _handleAuthLink(Uri uri) async {
+void _observeAuthLink(Uri uri) {
   if (!AppConfig.hasBackend || uri.scheme != 'io.supabase.flutter' || uri.host != 'login-callback') return;
-  try {
-    final auth = Supabase.instance.client.auth;
-    // Supabase OAuth may return either a PKCE authorization code (?code=...)
-    // or implicit-flow tokens in the URI fragment. Handle each explicitly.
-    final code = uri.queryParameters['code'];
-    if (code != null && code.isNotEmpty) {
-      await auth.exchangeCodeForSession(code);
-    } else if (uri.fragment.contains('access_token=')) {
-      await auth.getSessionFromUrl(uri);
-    } else {
-      debugPrint('LAMA OAuth callback arrived without a code or access token: $uri');
-    }
-  } catch (error, stackTrace) {
-    debugPrint('LAMA OAuth callback processing failed: $error');
-    debugPrintStack(stackTrace: stackTrace);
-  }
+  debugPrint('LAMA received OAuth return link. Query keys: ${uri.queryParameters.keys.toList()}');
 }
 
 Future<void> main() async {
@@ -39,13 +25,13 @@ Future<void> main() async {
     await Supabase.initialize(url: AppConfig.supabaseUrl, anonKey: AppConfig.supabaseAnonKey);
     final links = AppLinks();
     _authLinkSubscription = links.uriLinkStream.listen((uri) {
-      unawaited(_handleAuthLink(uri));
+      _observeAuthLink(uri);
     }, onError: (Object error) {
       debugPrint('LAMA app link stream: $error');
     });
     try {
       final initialUri = await links.getInitialLink();
-      if (initialUri != null) await _handleAuthLink(initialUri);
+      if (initialUri != null) _observeAuthLink(initialUri);
     } catch (error) {
       debugPrint('LAMA initial OAuth callback: $error');
     }
