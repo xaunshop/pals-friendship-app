@@ -12,6 +12,23 @@ create table if not exists public.private_profile_details (
   constraint private_profile_min_age check (date_of_birth <= (current_date - interval '12 years')::date)
 );
 
+create table if not exists public.ghosted_posts (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  post_id uuid not null references public.posts(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (user_id, post_id)
+);
+alter table public.ghosted_posts enable row level security;
+drop policy if exists "Users read own ghosted posts" on public.ghosted_posts;
+create policy "Users read own ghosted posts" on public.ghosted_posts
+  for select to authenticated using (user_id = auth.uid());
+drop policy if exists "Users ghost posts as self" on public.ghosted_posts;
+create policy "Users ghost posts as self" on public.ghosted_posts
+  for insert to authenticated with check (user_id = auth.uid());
+drop policy if exists "Users unghost own posts" on public.ghosted_posts;
+create policy "Users unghost own posts" on public.ghosted_posts
+  for delete to authenticated using (user_id = auth.uid());
+
 alter table public.private_profile_details enable row level security;
 
 drop policy if exists "Users read own private profile details" on public.private_profile_details;
